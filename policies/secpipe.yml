@@ -1,0 +1,9 @@
+gates:
+  trivy_severity: "HIGH,CRITICAL"
+  ignore_unfixed: true
+  semgrep_config: "p/ci"
+
+sbom:
+  enabled: true
+  format: "cyclonedx"
+  artifact_name: "sbom-cyclonedx"
