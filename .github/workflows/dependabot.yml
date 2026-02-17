@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned/up-to-date in this repo
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # If you have Python tooling here (optional), Dependabot can update it too.
+  # If you don't have requirements/pyproject in toolkit repo, you can remove this block.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10

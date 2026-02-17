@@ -1,0 +1,15 @@
+title = "devsecops-toolkit gitleaks config"
+
+[extend]
+useDefault = true
+
+# Add repo-specific allowlists here if needed.
+# Keep it strict by default; only allowlist known false positives with a good reason.
+[allowlist]
+description = "Allowlist for known false positives"
+paths = [
+  # Example: "docs/examples/**",
+]
+regexes = [
+  # Example: "EXAMPLE_FAKE_SECRET_FOR_DOCS_ONLY"
+]

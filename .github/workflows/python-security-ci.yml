@@ -3,12 +3,50 @@ name: python-security-ci
 on:
   workflow_call:
 
+# Default to least privilege. Jobs that need more should override.
 permissions:
   contents: read
 
+# Prevent duplicate runs on the same branch/ref (helps PR spam + saves minutes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  test:
+  secrets-scan:
+    name: Gitleaks (secrets scan)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks (use config if present)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >
+            detect
+            --source .
+            --no-git
+            --redact
+            ${{ hashFiles('.gitleaks.toml') != '' && '--config .gitleaks.toml' || '' }}
+
+  test:
+    name: Ruff + Pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,9 +55,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            app/requirements.txt
+            requirements.txt
+            pyproject.toml
 
       - name: Install (if requirements exist)
-        shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
@@ -36,7 +78,6 @@ jobs:
         run: ruff check .
 
       - name: Tests (only if tests exist)
-        shell: bash
         run: |
           set -euo pipefail
           if [[ -d "tests" ]] || compgen -G "test*.py" > /dev/null; then
@@ -46,19 +87,45 @@ jobs:
           fi
 
   semgrep:
+    name: Semgrep (SAST)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Needed only if you decide to upload SARIF to GitHub code scanning (optional step below)
+      security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Semgrep (SAST)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # If SEMGREP_APP_TOKEN is not set in the caller repo, Semgrep still runs in OSS mode with rules.
+      - name: Semgrep scan
         uses: semgrep/semgrep-action@v1
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         with:
           config: p/ci
 
+      # Optional: if you want results in GitHub "Security" → "Code scanning",
+      # uncomment the next step and ensure security-events: write is allowed (already set above).
+      #
+      # - name: Upload SARIF (Semgrep)
+      #   if: always() && hashFiles('semgrep.sarif') != ''
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: semgrep.sarif
+
   trivy_fs:
+    name: Trivy FS (deps + config)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - name: Trivy filesystem scan (deps + config)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.20.0
         with:
           scan-type: fs
@@ -67,15 +134,21 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
+          cache-dir: .trivy-cache
 
   build_and_scan_image:
+    name: Docker build + Trivy image + SBOM
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Check if Dockerfile exists
         id: dockerfile
-        shell: bash
         run: |
           if [[ -f "Dockerfile" ]]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
@@ -96,6 +169,7 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
+          cache-dir: .trivy-cache
 
       - name: Generate SBOM (CycloneDX) (if Dockerfile exists)
         if: steps.dockerfile.outputs.present == 'true'
@@ -112,3 +186,4 @@ jobs:
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
+          if-no-files-found: error
