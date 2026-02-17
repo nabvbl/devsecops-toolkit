@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Semgrep (SAST)
         uses: semgrep/semgrep-action@v1
@@ -62,10 +62,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Trivy filesystem scan (deps + config)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: fs
           scan-ref: .
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check if Dockerfile exists
         id: dockerfile
@@ -96,7 +96,7 @@ jobs:
 
       - name: Trivy image scan (if Dockerfile exists)
         if: steps.dockerfile.outputs.present == 'true'
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: app:ci
           format: table
@@ -106,7 +106,7 @@ jobs:
 
       - name: Generate SBOM (CycloneDX) (if Dockerfile exists)
         if: steps.dockerfile.outputs.present == 'true'
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: image
           image-ref: app:ci
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload SBOM artifact (if Dockerfile exists)
         if: steps.dockerfile.outputs.present == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
