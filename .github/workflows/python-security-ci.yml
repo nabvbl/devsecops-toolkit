@@ -3,11 +3,9 @@ name: python-security-ci
 on:
   workflow_call:
 
-# Default to least privilege. Jobs that need more should override.
 permissions:
   contents: read
 
-# Prevent duplicate runs on the same branch/ref (helps PR spam + saves minutes)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -29,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run gitleaks (use config if present)
+      - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,7 +37,7 @@ jobs:
             --source .
             --no-git
             --redact
-            ${{ hashFiles('.gitleaks.toml') != '' && '--config .gitleaks.toml' || '' }}
+            --config .gitleaks.toml
 
   test:
     name: Ruff + Pytest
@@ -92,28 +90,16 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # Needed only if you decide to upload SARIF to GitHub code scanning (optional step below)
-      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # If SEMGREP_APP_TOKEN is not set in the caller repo, Semgrep still runs in OSS mode with rules.
       - name: Semgrep scan
         uses: semgrep/semgrep-action@v1
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         with:
           config: p/ci
-
-      # Optional: if you want results in GitHub "Security" → "Code scanning",
-      # uncomment the next step and ensure security-events: write is allowed (already set above).
-      #
-      # - name: Upload SARIF (Semgrep)
-      #   if: always() && hashFiles('semgrep.sarif') != ''
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   with:
-      #     sarif_file: semgrep.sarif
 
   trivy_fs:
     name: Trivy FS (deps + config)
@@ -142,7 +128,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
