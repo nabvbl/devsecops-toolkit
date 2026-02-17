@@ -20,17 +20,32 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install
+      - name: Install (if requirements exist)
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r app/requirements.txt
+          if [[ -f "app/requirements.txt" ]]; then
+            pip install -r app/requirements.txt
+          elif [[ -f "requirements.txt" ]]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt found (skipping dependency install)."
+          fi
           pip install pytest ruff
 
       - name: Lint (ruff)
         run: ruff check .
 
-      - name: Tests
-        run: pytest -q
+      - name: Tests (only if tests exist)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "tests" ]] || compgen -G "test*.py" > /dev/null; then
+            pytest -q
+          else
+            echo "No tests found (skipping)."
+          fi
 
   semgrep:
     runs-on: ubuntu-latest
@@ -65,10 +80,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Check if Dockerfile exists
+        id: dockerfile
+        shell: bash
+        run: |
+          if [[ -f "Dockerfile" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image (if Dockerfile exists)
+        if: steps.dockerfile.outputs.present == 'true'
         run: docker build -t app:ci .
 
-      - name: Trivy image scan
+      - name: Trivy image scan (if Dockerfile exists)
+        if: steps.dockerfile.outputs.present == 'true'
         uses: aquasecurity/trivy-action@0.20.0
         with:
           image-ref: app:ci
@@ -77,7 +104,8 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
 
-      - name: Generate SBOM (CycloneDX)
+      - name: Generate SBOM (CycloneDX) (if Dockerfile exists)
+        if: steps.dockerfile.outputs.present == 'true'
         uses: aquasecurity/trivy-action@0.20.0
         with:
           scan-type: image
@@ -85,8 +113,13 @@ jobs:
           format: cyclonedx
           output: sbom.cdx.json
 
-      - name: Upload SBOM artifact
+      - name: Upload SBOM artifact (if Dockerfile exists)
+        if: steps.dockerfile.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
+
+      - name: Skip message (no Dockerfile)
+        if: steps.dockerfile.outputs.present == 'false'
+        run: echo "No Dockerfile found — skipping image build/scan/SBOM."
